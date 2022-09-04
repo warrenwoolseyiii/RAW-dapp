@@ -6,46 +6,60 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 /**
+ * This is the coupon structure. Coupons are generated off chain so just model the structure here.
+ */
+struct Coupon {
+    bytes32 r;
+    bytes32 s;
+    uint8 v;
+}
+
+/**
  * @title Minter contract
  * @dev Extends ERC721Enumerable Non-Fungible Token Standard
  */
 contract Minter is ERC721Enumerable {
-    using SafeMath for uint256;
+    // Maximum allowable tokens that can be minted by caller
+    uint256 public constant MAX_MINTABLE = 10;
 
-    // Contract global variables.
-    uint256 public constant mintPrice = 30000000000000000; // 0.03 ETH.
-    uint256 public constant maxMint = 10;
-    uint256 public MAX_TOKENS = 10000;
+    // Internal mapping of minters and the number of NFTs they have minted.
+    mapping(address => uint8) internal minters;
 
     // Name token using inherited ERC721 constructor.
     constructor() ERC721("Minter", "MINTER") {}
 
-    // The main token minting function (recieves Ether).
-    function mint(uint256 numberOfTokens) public payable {
-        // Number of tokens can't be 0.
-        require(numberOfTokens != 0, "You need to mint at least 1 token");
-        // Check that the number of tokens requested doesn't exceed the max. allowed.
-        require(numberOfTokens <= maxMint, "You can only mint 10 tokens at a time");
-        // Check that the number of tokens requested wouldn't exceed what's left.
-        require(totalSupply().add(numberOfTokens) <= MAX_TOKENS, "Minting would exceed max. supply");
-        // Check that the right amount of Ether was sent.
-        require(mintPrice.mul(numberOfTokens) <= msg.value, "Not enough Ether sent.");
+    /**
+     * TODO: This is thie presale minting function. It takes in the number of tokens the caller wishes to mint, and the coupon the caller wishes to use.
+     * @dev Mints the number of tokens specified by the caller.
+     * @param _numberOfTokens The number of tokens the caller wishes to mint.
+     * @param _coupon The coupon the caller wishes to use.
+     */
+    function presaleMint(uint256 _numberOfTokens, Coupon memory _coupon)
+        public
+        payable
+    {
+        // Ensure we are minting at least one token.
+        require(_numberOfTokens > 0, "You must mint at least one token.");
 
-        // For each token requested, mint one.
-        for(uint256 i = 0; i < numberOfTokens; i++) {
-            uint256 mintIndex = totalSupply();
-            if(mintIndex < MAX_TOKENS) {
-                /** 
-                 * Mint token using inherited ERC721 function
-                 * msg.sender is the wallet address of mint requester
-                 * mintIndex is used for the tokenId (must be unique)
-                 */
-                _safeMint(msg.sender, mintIndex);
-            }
-        }
+        // Ensure the caling address has not minted more then their allowed amount.
+        require(
+            _numberOfTokens + minters[msg.sender] <= MAX_MINTABLE,
+            "You cannot mint more than 10 tokens per address."
+        );
     }
 
-    function getBalance() public view returns (uint256) {
-        return address(this).balance;
-    }
+    /**
+     * TODO: This is the public minting function. It takes in the number of tokens the caller wishes to mint.
+     * @dev Mints the number of tokens specified by the caller.
+     * @param _numberOfTokens The number of tokens the caller wishes to mint.
+     */
+    function publicMint(uint256 _numberOfTokens) public payable {}
+
+    /**
+     * TODO: This is the internal minting function. It takes the number of tokens the caller wishes to mint and the address of the caller.
+     * @dev Mints the number of tokens specified by the caller.
+     * @param _numberOfTokens The number of tokens the caller wishes to mint.
+     * @param _to The address of the caller.
+     */
+    function _mintTokens(uint256 _numberOfTokens, address _to) internal {}
 }
