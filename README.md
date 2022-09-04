@@ -37,6 +37,12 @@ And, a `src/artifacts` folder will be created in your project.
 
 Deploy the smart contract to the local blockchain for testing with `npx hardhat node`.
 
+If you get the following error `Error HH604: Error running JSON-RPC server: error:0308010C:digital envelope routines::unsupported` There is currently a [bug with hardhat using node v17](https://github.com/NomicFoundation/hardhat/issues/2765). Utilise the node n program to downgrade to node v16 like so:
+```
+$ npm install -g n
+$ n 16.16.0
+```
+
 If you're successful, you'll be presented with a number of account details in the CLI. Here's an example:
 
 ```
