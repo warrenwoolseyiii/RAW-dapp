@@ -25,6 +25,15 @@ enum MintPhase {
 }
 
 /**
+ * Enumeration for coupon types
+ */
+enum CouponType {
+    Contributor,
+    BAYCHolder,
+    GiveAway
+}
+
+/**
  * @title Minter contract
  * @dev Extends ERC721Enumerable Non-Fungible Token Standard
  */
@@ -107,11 +116,19 @@ contract Minter is ERC721Enumerable, Ownable {
             "Not enough tokens left to mint."
         );
 
-        // Ensure the caling address has not minted more then their allowed amount.
+        // Ensure the calling address has not minted more then their allowed amount.
         require(
             _numberOfTokens + minters[msg.sender] <= MAX_MINTABLE,
             "You cannot mint more than 10 tokens per address."
         );
+
+        // Ensure the caller has sent enough ether to cover the minting price.
+        require(
+            msg.value >= mintPrice.mul(_numberOfTokens),
+            "You must send enough ether to cover the minting price."
+        );
+
+        // TODO: Verify the coupon is valid.
 
         // Call the internal mint function
         _mintTokens(_numberOfTokens, msg.sender);
@@ -137,10 +154,16 @@ contract Minter is ERC721Enumerable, Ownable {
             "Not enough tokens left to mint."
         );
 
-        // Ensure the caling address has not minted more then their allowed amount.
+        // Ensure the calling address has not minted more then their allowed amount.
         require(
             _numberOfTokens + minters[msg.sender] <= MAX_MINTABLE,
             "You cannot mint more than 10 tokens per address."
+        );
+
+        // Ensure the caller has sent enough ether to cover the minting price.
+        require(
+            msg.value >= mintPrice.mul(_numberOfTokens),
+            "You must send enough ether to cover the minting price."
         );
 
         // Call the internal mint function
