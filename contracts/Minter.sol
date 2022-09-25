@@ -1,10 +1,13 @@
-// SPDX-License-Identifier: Unlicense
+// SPDX-License-Identifier: <SPDX-License>
 pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "contracts/RoyaltySplitter.sol";
+
 
 /**
  * This is the coupon structure. Coupons are generated off chain so just model the structure here.
@@ -37,8 +40,11 @@ enum CouponType {
  * @title Minter contract
  * @dev Extends ERC721Enumerable Non-Fungible Token Standard
  */
-contract Minter is ERC721Enumerable, Ownable {
+contract Minter is ERC721Enumerable, ERC2981, Ownable {
     using SafeMath for uint256;
+
+    // Declare an array of splitters to be stored in memory
+    RoyaltySplitter[] public splitters;
 
     // Maximum allowable tokens that can be minted by caller
     uint256 public constant MAX_MINTABLE = 10;
@@ -47,13 +53,13 @@ contract Minter is ERC721Enumerable, Ownable {
     mapping(address => uint8) internal minters;
 
     // Private admin signer of coupons
-    address private admin;
+    address private immutable admin;
 
-    // Internal state variable to track the current minting phase
-    MintPhase private mintPhase = MintPhase.Locked;
+    // Public state variable to track the current minting phase
+    MintPhase public mintPhase = MintPhase.Locked;
 
-    // Internal minting price
-    uint256 private mintPrice = 0.05 ether;
+    // Public minting price
+    uint256 public mintPrice = 0.05 ether;
 
     // Internal number of available tokens
     uint256 private availableTokens = 1000;
@@ -61,14 +67,19 @@ contract Minter is ERC721Enumerable, Ownable {
     // Name token using inherited ERC721 constructor.
     constructor(address adminSigner) ERC721("Minter", "MINTER") {
         admin = adminSigner;
+        setRoyaltyInfo(msg.sender, 1000);
     }
 
     /**
      * @dev Owner only function to set the minting phase.
-     * @param phase The phase to set the contract to.
+     * @param _phase The phase to set the contract to.
      */
-    function setMintPhase(MintPhase phase) public onlyOwner {
-        mintPhase = phase;
+    function setMintPhase(MintPhase _phase) public onlyOwner {
+        require(
+            _phase >= MintPhase.Locked && _phase <= MintPhase.PublicSale,
+            "Invalid mint phase"
+        );
+        mintPhase = _phase;
     }
 
     /**
@@ -77,6 +88,52 @@ contract Minter is ERC721Enumerable, Ownable {
      */
     function setMintPrice(uint256 price) public onlyOwner {
         mintPrice = price;
+    }
+
+    /**
+     * @dev Owner only function to set the ERC2981 royalty information.
+     * @param rcvAddress The address that recieves the royalties.
+     * @param feeBasisPoints The fee basis points for the royalties, maximum 10% == 1000 bps.
+     */
+    function setRoyaltyInfo(address rcvAddress, uint96 feeBasisPoints)
+        public
+        onlyOwner
+    {
+        // Require the basis points field to be less then or equal to 10% (1000 bps).
+        require(feeBasisPoints <= 1000);
+
+        // Call the ERC2981 default royalty function
+        _setDefaultRoyalty(rcvAddress, feeBasisPoints);
+    }
+
+    /**
+     * @dev Public function to get the array of splitters
+     * @return The array of splitters
+     */
+    function getSplitters() public view returns (RoyaltySplitter[] memory) {
+        return splitters;
+    }
+
+    /**
+     * @dev Get splitter information by index
+     */
+    function getSplitter(uint256 index)
+        public
+        view
+        returns (
+            address payable,
+            address payable,
+            uint96
+        )
+    {
+        // Protect against over index
+        require(index < splitters.length, "Index out of bounds");
+
+        // Get the splitter
+        RoyaltySplitter splitter = splitters[index];
+
+        // Return the splitter information
+        return (splitter.owner(), splitter.royaltyReciever(), splitter.split());
     }
 
     /**
@@ -178,15 +235,50 @@ contract Minter is ERC721Enumerable, Ownable {
     function _mintTokens(uint256 _numberOfTokens, address _to) internal {
         // For each token requested, mint one.
         for (uint256 i = 0; i < _numberOfTokens; i++) {
+            // Get the next mint index.
             uint256 mintIndex = totalSupply();
+
+            // Mint the token to the caller, if it's available.
             if (mintIndex < availableTokens) {
-                /**
-                 * Mint token using inherited ERC721 function
-                 * _to is the wallet address of mint requester
-                 * mintIndex is used for the tokenId (must be unique)
-                 */
+                // Update the minters mapping count.
+                minters[_to] += 1;
+
+                // Setup the royalty cut in bps
+                uint96 royaltyCut = 2500; // 25% for now
+
+                // Create a new RoyaltySplitter object, put it to the end of the array
+                RoyaltySplitter splitter = new RoyaltySplitter(
+                    payable(owner()),
+                    payable(_to),
+                    royaltyCut
+                );
+                splitters.push(splitter);
+
+                // Set the token royalty info as specified in the ERC2981 standard - use the address
+                // of the newly created splitter to handle the splitting of the royalty between the
+                // owner and minter of the NFT.
+                _setTokenRoyalty(
+                    mintIndex,
+                    address(splitters[splitters.length - 1]),
+                    royaltyCut / 10
+                );
+
+                // Mint the token.
                 _safeMint(_to, mintIndex);
             }
         }
+    }
+
+    /**
+     * @dev returns true if the contract implements the interface defined by
+     * @param interfaceId The interface identifier.
+     */
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721Enumerable, ERC2981)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 }
