@@ -27,7 +27,7 @@ describe("RoyaltySplitter", function () {
       assert.notEqual(address, undefined)
     })
   })
-  
+
   /**
    * @dev Test the constructor
    */
@@ -68,7 +68,7 @@ describe("RoyaltySplitter", function () {
       const RoyaltySplitter = await ethers.getContractFactory("RoyaltySplitter");
       const royaltySplitter = await RoyaltySplitter.deploy(owner, account1.address, royaltyCut);
       contract = await royaltySplitter.deployed();
-      
+
       // Try to change the owner through the global
       try {
         await contract.owner(account.address)
@@ -95,6 +95,73 @@ describe("RoyaltySplitter", function () {
       catch (err) {
         assert.include(err.message, "UNEXPECTED_ARGUMENT")
       }
+    })
+  })
+
+  /**
+   * @dev Test paying and withdrawing
+   */
+  describe("paying and withdrawing", function () {
+    it("should pay and withdraw", async function () {
+      // Royalty recipient address, get a hardhat account
+      const [account, account1, account2] = await ethers.getSigners()
+      // Royalty cut 25%
+      const royaltyCut = 2500
+      // Deploy the contract
+      const RoyaltySplitter = await ethers.getContractFactory("RoyaltySplitter");
+      const royaltySplitter = await RoyaltySplitter.deploy(account2.address, account1.address, royaltyCut);
+      contract = await royaltySplitter.deployed();
+      
+      // Get the account balance before, in ether
+      const accountBalanceBefore = ethers.utils.formatEther(await account.getBalance())
+ 
+      // Get the contract balance before, in ether
+      const contractBalanceBefore = ethers.utils.formatEther(await account.provider.getBalance(contract.address))
+      
+      // Transfer 1 ETH to the contract
+      await account.sendTransaction({
+        to: contract.address,
+        value: ethers.utils.parseEther("1.0")
+      });
+
+      // Get the account balance after, in ether
+      const accountBalanceAfter = ethers.utils.formatEther(await account.getBalance())
+
+      // Get the contract balance after, in ether
+      const contractBalanceAfter = ethers.utils.formatEther(await account.provider.getBalance(contract.address))
+
+      // Check that the account balance went down by 1 ETH, to the second decimal place
+      accDelta = Math.round((accountBalanceBefore - accountBalanceAfter) * 100) / 100
+      assert.equal(accDelta, 1.0)
+
+      // Check that the contract balance went up by 1 ETH, to the second decimal place
+      contDelta = Math.round((contractBalanceAfter - contractBalanceBefore) * 100) / 100
+      assert.equal(contDelta, 1.0)
+
+      // Check the account1 and account 2 balances before in ether
+      const account1BalanceBefore = ethers.utils.formatEther(await account1.getBalance())
+      const account2BalanceBefore = ethers.utils.formatEther(await account2.getBalance())
+
+      // Withdraw the funds
+      await contract.withdraw()
+
+      // Check the account1 and account 2 balances after in ether
+      const account1BalanceAfter = ethers.utils.formatEther(await account1.getBalance())
+      const account2BalanceAfter = ethers.utils.formatEther(await account2.getBalance())
+
+      // Log all the balances to the console
+      console.log("account1BalanceBefore: ", account1BalanceBefore)
+      console.log("account2BalanceBefore: ", account2BalanceBefore)
+      console.log("account1BalanceAfter: ", account1BalanceAfter)
+      console.log("account2BalanceAfter: ", account2BalanceAfter)
+
+      // Check that the account2 balance went up by 0.75 ETH, to the second decimal place
+      acc2Delta = Math.round((account2BalanceAfter - account2BalanceBefore) * 100) / 100
+      assert.equal(acc2Delta, 0.75)
+
+      // Check that the account1 balance went up by 0.25 ETH, to the second decimal place
+      acc1Delta = Math.round((account1BalanceAfter - account1BalanceBefore) * 100) / 100
+      assert.equal(acc1Delta, 0.25)
     })
   })
 })
@@ -200,7 +267,7 @@ describe("Minter", function () {
       const Minter = await ethers.getContractFactory("Minter")
       const minter = await Minter.deploy(adminSigner)
       const contract = await minter.deployed()
-      
+
       // Set the mint price to 0.1 ETH
       const mintPrice = ethers.utils.parseEther('0.1')
       await contract.setMintPrice(mintPrice)
@@ -305,7 +372,7 @@ describe("Minter", function () {
 
       // Try to mint when the mint phase is not public sale
       try {
-        await contract.publicMint(1, {value: mintPrice})
+        await contract.publicMint(1, { value: mintPrice })
         assert.fail('should have thrown before')
       }
       catch (error) {
@@ -317,7 +384,7 @@ describe("Minter", function () {
 
       // Try to mint an illegal number of tokens
       try {
-        await contract.publicMint(0, {value: mintPrice})
+        await contract.publicMint(0, { value: mintPrice })
         assert.fail('should have thrown before')
       }
       catch (error) {
@@ -329,7 +396,7 @@ describe("Minter", function () {
 
       // Try to mint more than the maximum number of tokens
       try {
-        await contract.publicMint(maxMint + 1, {value: mintPrice})
+        await contract.publicMint(maxMint + 1, { value: mintPrice })
         assert.fail('should have thrown before')
       }
       catch (error) {
@@ -363,7 +430,7 @@ describe("Minter", function () {
       // Get the splitter array and assert the length
       const splitters = await contract.getSplitters()
       expect(splitters.length).to.equal(1)
-      
+
       // Get the splitter information
       const splitter = await contract.getSplitter(0)
 

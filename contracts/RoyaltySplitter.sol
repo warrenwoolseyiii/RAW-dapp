@@ -31,17 +31,24 @@ contract RoyaltySplitter {
      * @dev Withdraw the balance of this contract to the owner and royalty reciever.
      */
     function withdraw() public {
-        // get the amount of Ether stored in this contract
-        uint amount = address(this).balance;
-        uint rcvAmount = amount * (split / 10000);
-        uint ownerAmount = amount - rcvAmount;
+        // Get the balance of this contract in wei
+        uint256 balance = address(this).balance;
+
+        // Calculate the split
+        uint256 royaltySplit = (balance * split) / 10000;
+        uint256 ownerSplit = balance - royaltySplit;
 
         // Send the ether to the correct parties
-        (bool success, ) = royaltyReciever.call{value: rcvAmount}("");
+        (bool success, ) = royaltyReciever.call{value: royaltySplit}("");
         require(success, "Failed to send Ether");
 
         // Owner can receive Ether since the address of owner is payable
-        (success, ) = owner.call{value: ownerAmount}("");
+        (success, ) = owner.call{value: ownerSplit}("");
         require(success, "Failed to send Ether");
     }
+
+    /**
+     * @dev Recieve Ether.
+     */
+    receive() external payable {}
 }
