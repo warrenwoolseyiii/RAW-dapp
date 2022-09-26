@@ -9,6 +9,9 @@ contract RoyaltySplitter {
     // Royalty reciever
     address payable public immutable royaltyReciever;
 
+    // Internal old balance
+    uint256 internal oldBalance;
+
     // Split
     uint96 public split;
 
@@ -25,6 +28,7 @@ contract RoyaltySplitter {
         // Split cannot exceed 100%
         if (_split <= 10000) split = _split;
         else split = 10000;
+        oldBalance = 0;
     }
 
     /**
@@ -34,17 +38,23 @@ contract RoyaltySplitter {
         // Get the balance of this contract in wei
         uint256 balance = address(this).balance;
 
-        // Calculate the split
-        uint256 royaltySplit = (balance * split) / 10000;
-        uint256 ownerSplit = balance - royaltySplit;
+        // Only do the transfer if there is something to transfer
+        if(balance > oldBalance) {
+            // Calculate the split
+            uint256 royaltySplit = (balance * split) / 10000;
+            uint256 ownerSplit = balance - royaltySplit;
 
-        // Send the ether to the correct parties
-        (bool success, ) = royaltyReciever.call{value: royaltySplit}("");
-        require(success, "Failed to send Ether");
+            // Send the ether to the correct parties
+            (bool success, ) = royaltyReciever.call{value: royaltySplit}("");
+            require(success, "Failed to send Ether");
 
-        // Owner can receive Ether since the address of owner is payable
-        (success, ) = owner.call{value: ownerSplit}("");
-        require(success, "Failed to send Ether");
+            // Owner can receive Ether since the address of owner is payable
+            (success, ) = owner.call{value: ownerSplit}("");
+            require(success, "Failed to send Ether");
+
+            // Set the old balance to the new balance
+            oldBalance = balance;
+        }
     }
 
     /**

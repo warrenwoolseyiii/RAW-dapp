@@ -270,6 +270,16 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
     }
 
     /**
+     * @dev Pays out the royalties from the sale of an NFT.
+     */
+    function payRoyalties() public {
+        // Loop through the splitters and pay out the royalties.
+        for (uint256 i = 0; i < splitters.length; i++) {
+            splitters[i].withdraw();
+        }
+    }
+
+    /**
      * @dev returns true if the contract implements the interface defined by
      * @param interfaceId The interface identifier.
      */
