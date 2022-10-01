@@ -8,7 +8,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "contracts/RoyaltySplitter.sol";
 
-
 /**
  * This is the coupon structure. Coupons are generated off chain so just model the structure here.
  */
@@ -61,8 +60,11 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
     // Public minting price
     uint256 public mintPrice = 0.05 ether;
 
-    // Internal number of available tokens
-    uint256 private availableTokens = 1000;
+    // Public number of available tokens
+    uint256 public availableTokens = 1000;
+
+    // Public minter royalty cut
+    uint96 public minterRoyaltyCut = 2500;
 
     // Name token using inherited ERC721 constructor.
     constructor(address adminSigner) ERC721("Minter", "MINTER") {
@@ -88,6 +90,23 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
      */
     function setMintPrice(uint256 price) public onlyOwner {
         mintPrice = price;
+    }
+
+    /**
+     * @dev Owner only function to set the number of available tokens.
+     * @param _availableTokens The number of available tokens to set the contract to.
+     */
+    function setAvailableTokens(uint256 _availableTokens) public onlyOwner {
+        availableTokens = _availableTokens;
+    }
+
+    /**
+     * @dev Owner only function to set the minter royalty cut.
+     * @param _minterRoyaltyCut The minter royalty cut to set the contract to.
+     */
+    function setMinterRoyaltyCut(uint96 _minterRoyaltyCut) public onlyOwner {
+        require(_minterRoyaltyCut <= 10000, "Royalty cut cannot exceed 100%");
+        minterRoyaltyCut = _minterRoyaltyCut;
     }
 
     /**
@@ -161,28 +180,13 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
         public
         payable
     {
-        // Ensure we are minting at least one token.
-        require(_numberOfTokens > 0, "You must mint at least one token.");
-
-        // Ensure we are currently in the presale phase.
-        require(mintPhase == MintPhase.PreSale, "Presale is not active.");
-
-        // Ensure that there are enough tokens left to mint.
+        // Ensure we are minting a legal amount of tokens, we are in the presale phase, and the caller has enough ether to cover the minting.
         require(
-            totalSupply().add(_numberOfTokens) <= availableTokens,
-            "Not enough tokens left to mint."
-        );
-
-        // Ensure the calling address has not minted more then their allowed amount.
-        require(
-            _numberOfTokens + minters[msg.sender] <= MAX_MINTABLE,
-            "You cannot mint more than 10 tokens per address."
-        );
-
-        // Ensure the caller has sent enough ether to cover the minting price.
-        require(
-            msg.value >= mintPrice.mul(_numberOfTokens),
-            "You must send enough ether to cover the minting price."
+            _numberOfTokens > 0 &&
+                _numberOfTokens + minters[msg.sender] <= MAX_MINTABLE &&
+                mintPhase == MintPhase.PreSale &&
+                msg.value >= mintPrice.mul(_numberOfTokens),
+            "Invalid minting parameters"
         );
 
         // TODO: Verify the coupon is valid.
@@ -196,31 +200,13 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
      * @param _numberOfTokens The number of tokens the caller wishes to mint.
      */
     function publicMint(uint256 _numberOfTokens) public payable {
-        // Ensure we are minting at least one token.
-        require(_numberOfTokens > 0, "You must mint at least one token.");
-
-        // Ensure we are currently in the public sale phase.
+        // Ensure we are minting a legal amount of tokens, we are in the public phase, and the caller has enough ether to cover the minting.
         require(
-            mintPhase == MintPhase.PublicSale,
-            "Public sale is not active."
-        );
-
-        // Ensure that there are enough tokens left to mint.
-        require(
-            totalSupply().add(_numberOfTokens) <= availableTokens,
-            "Not enough tokens left to mint."
-        );
-
-        // Ensure the calling address has not minted more then their allowed amount.
-        require(
-            _numberOfTokens + minters[msg.sender] <= MAX_MINTABLE,
-            "You cannot mint more than 10 tokens per address."
-        );
-
-        // Ensure the caller has sent enough ether to cover the minting price.
-        require(
-            msg.value >= mintPrice.mul(_numberOfTokens),
-            "You must send enough ether to cover the minting price."
+            _numberOfTokens > 0 &&
+                _numberOfTokens + minters[msg.sender] <= MAX_MINTABLE &&
+                mintPhase == MintPhase.PublicSale &&
+                msg.value >= mintPrice.mul(_numberOfTokens),
+            "Invalid minting parameters"
         );
 
         // Call the internal mint function
@@ -243,14 +229,11 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
                 // Update the minters mapping count.
                 minters[_to] += 1;
 
-                // Setup the royalty cut in bps
-                uint96 royaltyCut = 2500; // 25% for now
-
                 // Create a new RoyaltySplitter object, put it to the end of the array
                 RoyaltySplitter splitter = new RoyaltySplitter(
                     payable(owner()),
                     payable(_to),
-                    royaltyCut
+                    minterRoyaltyCut
                 );
                 splitters.push(splitter);
 
@@ -260,7 +243,7 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
                 _setTokenRoyalty(
                     mintIndex,
                     address(splitters[splitters.length - 1]),
-                    royaltyCut / 10
+                    1000
                 );
 
                 // Mint the token.

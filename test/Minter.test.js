@@ -111,36 +111,16 @@ describe("RoyaltySplitter", function () {
       const RoyaltySplitter = await ethers.getContractFactory("RoyaltySplitter");
       const royaltySplitter = await RoyaltySplitter.deploy(account2.address, account1.address, royaltyCut);
       contract = await royaltySplitter.deployed();
-      
-      // Get the account balance before, in ether
-      const accountBalanceBefore = ethers.utils.formatEther(await account.getBalance())
- 
-      // Get the contract balance before, in ether
-      const contractBalanceBefore = ethers.utils.formatEther(await account.provider.getBalance(contract.address))
+
+      // Check the account1 and account 2 balances before in ether
+      const account1BalanceBefore = ethers.utils.formatEther(await account1.getBalance())
+      const account2BalanceBefore = ethers.utils.formatEther(await account2.getBalance())
       
       // Transfer 1 ETH to the contract
       await account.sendTransaction({
         to: contract.address,
         value: ethers.utils.parseEther("1.0")
       });
-
-      // Get the account balance after, in ether
-      const accountBalanceAfter = ethers.utils.formatEther(await account.getBalance())
-
-      // Get the contract balance after, in ether
-      const contractBalanceAfter = ethers.utils.formatEther(await account.provider.getBalance(contract.address))
-
-      // Check that the account balance went down by 1 ETH, to the second decimal place
-      accDelta = Math.round((accountBalanceBefore - accountBalanceAfter) * 100) / 100
-      assert.equal(accDelta, 1.0)
-
-      // Check that the contract balance went up by 1 ETH, to the second decimal place
-      contDelta = Math.round((contractBalanceAfter - contractBalanceBefore) * 100) / 100
-      assert.equal(contDelta, 1.0)
-
-      // Check the account1 and account 2 balances before in ether
-      const account1BalanceBefore = ethers.utils.formatEther(await account1.getBalance())
-      const account2BalanceBefore = ethers.utils.formatEther(await account2.getBalance())
 
       // Withdraw the funds
       await contract.withdraw()
@@ -468,15 +448,12 @@ describe("Minter", function () {
       splitters = await contract.getSplitters()
       const splitter = splitters[0]
 
-      // Transfer 0.5 ETH to the splitter address from account2
-      await account2.sendTransaction({ to: splitter, value: ethers.utils.parseEther('0.5') })
-
       // Get the balance of account0 and account1 in ETH
       const account0Balance = ethers.utils.formatEther(await account0.getBalance())
       const account1Balance = ethers.utils.formatEther(await account1.getBalance())
 
-      // Payout the royalties
-      await contract.payRoyalties()
+      // Transfer 0.5 ETH to the splitter address from account2
+      await account2.sendTransaction({ to: splitter, value: ethers.utils.parseEther('0.5') })
 
       // Get the balance of account0 and account1 in ETH
       const newAccount0Balance = ethers.utils.formatEther(await account0.getBalance())
@@ -487,7 +464,7 @@ describe("Minter", function () {
       const delta1 = (newAccount1Balance - account1Balance).toFixed(2)
 
       // Assert the deltas are correct
-      expect(delta0).to.equal('0.37')
+      expect(delta0).to.equal('0.38')
       expect(delta1).to.equal('0.13')
     })
   })
