@@ -115,7 +115,7 @@ describe("RoyaltySplitter", function () {
       // Check the account1 and account 2 balances before in ether
       const account1BalanceBefore = ethers.utils.formatEther(await account1.getBalance())
       const account2BalanceBefore = ethers.utils.formatEther(await account2.getBalance())
-      
+
       // Transfer 1 ETH to the contract
       await account.sendTransaction({
         to: contract.address,
@@ -144,8 +144,9 @@ describe("Minter", function () {
   describe('deployment', async function () {
     it('deploys successfully', async function () {
       const adminSigner = "0x7F234922543833d66694F530D4123f86888b50c6"
+      const [receiver] = await ethers.getSigners()
       const Minter = await ethers.getContractFactory("Minter")
-      const minter = await Minter.deploy(adminSigner)
+      const minter = await Minter.deploy(adminSigner, receiver.address)
       const contract = await minter.deployed()
       const address = contract.address
       assert.notEqual(address, 0x0)
@@ -161,8 +162,9 @@ describe("Minter", function () {
   describe('setMintPhase', async function () {
     it('sets the mint phase', async function () {
       const adminSigner = "0x7F234922543833d66694F530D4123f86888b50c6"
+      const [receiver] = await ethers.getSigners()
       const Minter = await ethers.getContractFactory("Minter")
-      const minter = await Minter.deploy(adminSigner)
+      const minter = await Minter.deploy(adminSigner, receiver.address)
       const contract = await minter.deployed()
 
       // Make a bunch of mint phases
@@ -238,8 +240,9 @@ describe("Minter", function () {
   describe('setMintPrice', async function () {
     it('sets the mint price', async function () {
       const adminSigner = "0x7F234922543833d66694F530D4123f86888b50c6"
+      const [receiver] = await ethers.getSigners()
       const Minter = await ethers.getContractFactory("Minter")
-      const minter = await Minter.deploy(adminSigner)
+      const minter = await Minter.deploy(adminSigner, receiver.address)
       const contract = await minter.deployed()
 
       // Set the mint price to 0.1 ETH
@@ -277,8 +280,9 @@ describe("Minter", function () {
   describe('setRoyalty', async function () {
     it('sets the royalty', async function () {
       const adminSigner = "0x7F234922543833d66694F530D4123f86888b50c6"
+      const [receiver] = await ethers.getSigners()
       const Minter = await ethers.getContractFactory("Minter")
-      const minter = await Minter.deploy(adminSigner)
+      const minter = await Minter.deploy(adminSigner, receiver.address)
       const contract = await minter.deployed()
 
       // Check the default royalty information
@@ -331,8 +335,9 @@ describe("Minter", function () {
   describe('publicMint', async function () {
     it('mints a token in the public sale', async function () {
       const adminSigner = "0x7F234922543833d66694F530D4123f86888b50c6"
+      const [, , , , , ,receiver] = await ethers.getSigners()
       const Minter = await ethers.getContractFactory("Minter")
-      const minter = await Minter.deploy(adminSigner)
+      const minter = await Minter.deploy(adminSigner, receiver.address)
       const contract = await minter.deployed()
 
       // Make a bunch of mint phases
@@ -399,23 +404,15 @@ describe("Minter", function () {
       const [account0, account1] = await ethers.getSigners()
 
       // Mint a single token using the non-owner account
+      const receiverBalanceBefore = await ethers.provider.getBalance(receiver.address)
       await contract.connect(account1).publicMint(1, { value: mintPrice })
 
-      // Get the splitter array and assert the length
-      const splitters = await contract.getSplitters()
-      expect(splitters.length).to.equal(1)
+      // Withdraw the funds to ownership
+      await contract.withdraw(false)
 
-      // Get the splitter information
-      const splitter = await contract.getSplitter(0)
-
-      // Assert the owner address is the owner of the minter contract
-      expect(splitter[0]).to.equal(account0.address)
-
-      // Assert the splitter address is the account that minted the token
-      expect(splitter[1]).to.equal(account1.address)
-
-      // Assert the splitter amount 2500
-      expect(splitter[2].toString()).to.equal("2500")
+      // Assert the reciever has the correct balance after the mint
+      const receiverBalanceAfter = await ethers.provider.getBalance(receiver.address)
+      expect(receiverBalanceAfter.sub(receiverBalanceBefore)).to.equal(mintPrice)
     })
   })
 
@@ -425,8 +422,9 @@ describe("Minter", function () {
   describe('royalty payout', async function () {
     it('pays out the royalty', async function () {
       const adminSigner = "0x7F234922543833d66694F530D4123f86888b50c6"
+      const [, , , , , , , ,receiver] = await ethers.getSigners()
       const Minter = await ethers.getContractFactory("Minter")
-      const minter = await Minter.deploy(adminSigner)
+      const minter = await Minter.deploy(adminSigner, receiver.address)
       const contract = await minter.deployed()
 
       // Get the minting price
@@ -439,14 +437,15 @@ describe("Minter", function () {
       const [account0, account1, account2] = await ethers.getSigners()
 
       // Mint a single token using the non-owner account
+      const receiverBalanceBefore = await ethers.provider.getBalance(receiver.address)
       await contract.connect(account1).publicMint(1, { value: mintPrice })
 
       // Transfer the token from account1 to account2
       await contract.connect(account1).transferFrom(account1.address, account2.address, 0)
 
-      // Get the address of the splitter index 0
-      splitters = await contract.getSplitters()
-      const splitter = splitters[0]
+      // Get the royalty information from the ERC2981 contract
+      const royalty = await contract.royaltyInfo(0, mintPrice)
+      const splitter = royalty[0]
 
       // Get the balance of account0 and account1 in ETH
       const account0Balance = ethers.utils.formatEther(await account0.getBalance())
@@ -466,14 +465,22 @@ describe("Minter", function () {
       // Assert the deltas are correct
       expect(delta0).to.equal('0.38')
       expect(delta1).to.equal('0.13')
+
+      // Withdraw the funds to ownership
+      await contract.withdraw(false)
+
+      // Assert the reciever has the correct balance after the mint
+      const receiverBalanceAfter = await ethers.provider.getBalance(receiver.address)
+      expect(receiverBalanceAfter.sub(receiverBalanceBefore)).to.equal(mintPrice)
     })
   })
 
   describe('fetching', async function () {
     it('fetches data as expected', async function () {
       const adminSigner = "0x7F234922543833d66694F530D4123f86888b50c6"
+      const [receiver] = await ethers.getSigners()
       const Minter = await ethers.getContractFactory("Minter")
-      const minter = await Minter.deploy(adminSigner)
+      const minter = await Minter.deploy(adminSigner, receiver.address)
       const contract = await minter.deployed()
       // Request totalSupply from contract.
       const totalSupply = await contract.totalSupply()

@@ -42,33 +42,29 @@ enum CouponType {
 contract Minter is ERC721Enumerable, ERC2981, Ownable {
     using SafeMath for uint256;
 
-    // Declare an array of splitters to be stored in memory
-    RoyaltySplitter[] public splitters;
-
-    // Maximum allowable tokens that can be minted by caller
-    uint256 public constant MAX_MINTABLE = 10;
-
     // Internal mapping of minters and the number of NFTs they have minted.
     mapping(address => uint8) internal minters;
 
     // Private admin signer of coupons
     address private immutable admin;
 
-    // Public state variable to track the current minting phase
+    // Private ownership contract address
+    address private immutable ownership;
+
+    // Public minting information
     MintPhase public mintPhase = MintPhase.Locked;
-
-    // Public minting price
     uint256 public mintPrice = 0.05 ether;
-
-    // Public number of available tokens
     uint256 public availableTokens = 1000;
-
-    // Public minter royalty cut
     uint96 public minterRoyaltyCut = 2500;
+    uint256 public constant MAX_MINTABLE = 10;
+
+    // Public array of splitters for royalties
+    RoyaltySplitter[] public splitters;
 
     // Name token using inherited ERC721 constructor.
-    constructor(address adminSigner) ERC721("Minter", "MINTER") {
+    constructor(address adminSigner, address payout) ERC721("Minter", "MINTER") {
         admin = adminSigner;
+        ownership = payout;
         setRoyaltyInfo(msg.sender, 1000);
     }
 
@@ -123,36 +119,6 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
 
         // Call the ERC2981 default royalty function
         _setDefaultRoyalty(rcvAddress, feeBasisPoints);
-    }
-
-    /**
-     * @dev Public function to get the array of splitters
-     * @return The array of splitters
-     */
-    function getSplitters() public view returns (RoyaltySplitter[] memory) {
-        return splitters;
-    }
-
-    /**
-     * @dev Get splitter information by index
-     */
-    function getSplitter(uint256 index)
-        public
-        view
-        returns (
-            address payable,
-            address payable,
-            uint96
-        )
-    {
-        // Protect against over index
-        require(index < splitters.length, "Index out of bounds");
-
-        // Get the splitter
-        RoyaltySplitter splitter = splitters[index];
-
-        // Return the splitter information
-        return (splitter.owner(), splitter.royaltyReciever(), splitter.split());
     }
 
     /**
@@ -253,13 +219,22 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
     }
 
     /**
-     * @dev Pays out the royalties from the sale of an NFT.
+     * @dev Withdraws the funds from the contract.
+     * @param _includeRoyalties Whether or not to include the royalties in the withdraw.
      */
-    function payRoyalties() public {
-        // Loop through the splitters and pay out the royalties.
-        for (uint256 i = 0; i < splitters.length; i++) {
-            splitters[i].withdraw();
+    function withdraw(bool _includeRoyalties) public onlyOwner {
+        // Get the balance of the contract.
+        uint256 balance = address(this).balance;
+
+        // If we are including the royalties, then we need to subtract the royalties from the balance.
+        if (_includeRoyalties) {
+            for (uint256 i = 0; i < splitters.length; i++) {
+                splitters[i].withdraw();
+            }
         }
+
+        // Send the balance to ownership.
+        payable(ownership).transfer(balance);
     }
 
     /**
