@@ -223,9 +223,6 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
      * @param _includeRoyalties Whether or not to include the royalties in the withdraw.
      */
     function withdraw(bool _includeRoyalties) public onlyOwner {
-        // Get the balance of the contract.
-        uint256 balance = address(this).balance;
-
         // If we are including the royalties, then we need to subtract the royalties from the balance.
         if (_includeRoyalties) {
             for (uint256 i = 0; i < splitters.length; i++) {
@@ -234,7 +231,8 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
         }
 
         // Send the balance to ownership.
-        payable(ownership).transfer(balance);
+        (bool success, ) = ownership.call{value: address(this).balance}("");
+        require(success, "Failed to pay ownership.");
     }
 
     /**
