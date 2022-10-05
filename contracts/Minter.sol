@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "contracts/RoyaltySplitter.sol";
+import "@openzeppelin/contracts/utils/Strings.sol"; 
 
 /**
  * This is the coupon structure. Coupons are generated off chain so just model the structure here.
@@ -57,6 +58,7 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
     uint256 public availableTokens = 1000;
     uint96 public minterRoyaltyCut = 2500;
     uint256 public constant MAX_MINTABLE = 10;
+    string public baseURI = "ipfs://QmX9GkJGqsTFrx6thzniJbcoLq6e4qpCxRPyrkRbcMEKvD";
 
     // Public array of splitters for royalties
     RoyaltySplitter[] public splitters;
@@ -66,6 +68,32 @@ contract Minter is ERC721Enumerable, ERC2981, Ownable {
         admin = adminSigner;
         ownership = payout;
         setRoyaltyInfo(msg.sender, 1000);
+    }
+
+    /**
+     * @dev See {IERC721Metadata-tokenURI}.
+     */
+    function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
+        _requireMinted(tokenId);
+
+        string memory URI = _baseURI();
+        return bytes(URI).length > 0 ? string(abi.encodePacked(URI, "/", Strings.toString(tokenId), ".json")) : "";
+    }
+
+    /**
+     * @dev Base URI for computing {tokenURI}. If set, the resulting URI for each
+     * token will be the concatenation of the `baseURI` and the `tokenId`. Empty
+     * by default, can be overridden in child contracts.
+     */
+    function _baseURI() internal view virtual override returns (string memory) {
+        return baseURI;
+    }
+
+    /**
+     * @dev Set the base URI for computing {tokenURI}.
+     */
+    function setBaseURI(string memory newBaseURI) public onlyOwner {
+        baseURI = newBaseURI;
     }
 
     /**
